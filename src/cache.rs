@@ -5,7 +5,7 @@ use dirs::{cache_dir, home_dir};
 
 fn get_cache_root() -> PathBuf {
     cache_dir()
-    .unwrap_or_else(|| home_dir().unwrap_or_else(|| PathBuf::from("./config")))
+    .unwrap_or_else(|| home_dir().unwrap_or_else(|| PathBuf::from(".")))
     .join("nay")
     .join("builds")
 }

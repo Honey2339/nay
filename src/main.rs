@@ -3,8 +3,8 @@ use clap::{Parser, Subcommand};
 use crate::install::install_package;
 
 mod install;
-mod repo;
 mod cache;
+mod aur;
 
 #[derive(Parser)]
 #[command(name = "nay")]
