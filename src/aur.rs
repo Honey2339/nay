@@ -8,9 +8,10 @@ struct AurResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct AurPackage {
-    pub name: String,
-    pub version: String,
-    pub description: String,
+    pub Name: String,
+    pub Version: String,
+    pub Description: String,
+    pub URL: Option<String>,
 }
 
 pub fn fetch_package_info(pkg: &str) -> io::Result<Option<AurPackage>> {
