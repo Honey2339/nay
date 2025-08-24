@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -eo pipefail
 
 REPO="https://github.com/Honey2339/nay.git"
 PROGRAM_NAME="nay"
 INSTALL_DIR="/usr/local/bin"
-BUILD_DIR="$(mktemp -d)"
-
-SCRIPT_URL="https://raw.githubusercontent.com/Honey2339/nay/main/install.sh"
+TEMP_ROOT="/tmp"
+BUILD_DIR="$TEMP_ROOT/nay-install-$$"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
-
 
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -34,7 +32,7 @@ log_error() {
 
 cleanup() {
     if [[ -d "$BUILD_DIR" ]]; then
-        log_info "Cleaning up build directory..."
+        log_info "Cleaning up temporary directory: $BUILD_DIR"
         rm -rf "$BUILD_DIR"
     fi
 }
@@ -56,7 +54,7 @@ check_root() {
 }
 
 check_dependencies() {
-    log_info "Checking dependencies..."
+    log_info "Checking system dependencies..."
     
     local missing_deps=()
     
@@ -106,37 +104,79 @@ setup_rust() {
         log_info "Initializing Rust stable toolchain..."
         rustup default stable
         
-        source "$HOME/.cargo/env" 2>/dev/null || true
+        export PATH="$HOME/.cargo/bin:$PATH"
     fi
     
     if ! command -v cargo &>/dev/null; then
-        log_error "Cargo still not available after installation. Please check your PATH."
-        log_info "You may need to restart your shell or run: source ~/.bashrc"
-        exit 1
+        log_error "Cargo still not available after installation."
+        log_info "Trying to source cargo environment..."
+        if [[ -f "$HOME/.cargo/env" ]]; then
+            source "$HOME/.cargo/env"
+        fi
+        
+        if ! command -v cargo &>/dev/null; then
+            log_error "Cargo setup failed. Please restart your shell and try again."
+            exit 1
+        fi
     fi
     
     log_success "Rust environment is ready."
 }
 
-clone_and_build() {
-    log_info "Cloning repository to $BUILD_DIR..."
+create_temp_directory() {
+    log_info "Creating temporary build directory: $BUILD_DIR"
     
-    if ! git clone --depth=1 "$REPO" "$BUILD_DIR/$PROGRAM_NAME"; then
+    if ! mkdir -p "$BUILD_DIR"; then
+        log_error "Failed to create temporary directory: $BUILD_DIR"
+        exit 1
+    fi
+    
+    log_success "Temporary directory created."
+}
+
+clone_repository() {
+    log_info "Cloning repository from $REPO..."
+    
+    cd "$BUILD_DIR"
+    
+    if ! git clone --depth=1 "$REPO" "$PROGRAM_NAME"; then
         log_error "Failed to clone repository"
         exit 1
     fi
     
-    cd "$BUILD_DIR/$PROGRAM_NAME"
+    log_success "Repository cloned successfully."
+}
+
+build_project() {
+    local project_dir="$BUILD_DIR/$PROGRAM_NAME"
     
-    log_info "Building $PROGRAM_NAME (this may take a while)..."
+    log_info "Building $PROGRAM_NAME from source..."
+    log_info "Build directory: $project_dir"
+    
+    cd "$project_dir"
+    
+    if [[ ! -f "Cargo.toml" ]]; then
+        log_error "Cargo.toml not found in the project directory"
+        log_info "Project structure:"
+        ls -la
+        exit 1
+    fi
+    
+    log_info "Building release version (this may take a while)..."
     
     if ! cargo build --release; then
         log_error "Failed to build $PROGRAM_NAME"
+        log_info "Build logs should be above. Common issues:"
+        log_info "- Missing dependencies in Cargo.toml"
+        log_info "- Network issues downloading crates"
+        log_info "- Compilation errors in source code"
         exit 1
     fi
     
     if [[ ! -f "target/release/$PROGRAM_NAME" ]]; then
         log_error "Binary not found at target/release/$PROGRAM_NAME"
+        log_info "Contents of target/release/:"
+        ls -la target/release/ 2>/dev/null || echo "target/release/ directory not found"
         exit 1
     fi
     
@@ -156,7 +196,12 @@ install_binary() {
     fi
     
     if [[ ! -f "$INSTALL_DIR/$PROGRAM_NAME" ]]; then
-        log_error "Installation verification failed"
+        log_error "Installation verification failed - binary not found at $INSTALL_DIR/$PROGRAM_NAME"
+        exit 1
+    fi
+    
+    if [[ ! -x "$INSTALL_DIR/$PROGRAM_NAME" ]]; then
+        log_error "Binary is not executable"
         exit 1
     fi
     
@@ -168,54 +213,75 @@ verify_installation() {
     
     if command -v "$PROGRAM_NAME" &>/dev/null; then
         local version
-        version=$("$PROGRAM_NAME" --version 2>/dev/null || echo "unknown")
+        version=$("$PROGRAM_NAME" --version 2>/dev/null || echo "version check failed")
         log_success "$PROGRAM_NAME is installed and accessible (version: $version)"
         return 0
     else
-        log_warning "$PROGRAM_NAME is not in PATH. You may need to:"
-        log_info "1. Restart your shell, or"
-        log_info "2. Add $INSTALL_DIR to your PATH by adding this to your ~/.bashrc or ~/.zshrc:"
-        log_info "   export PATH=\"$INSTALL_DIR:\$PATH\""
+        log_warning "$PROGRAM_NAME is installed but not immediately accessible via PATH."
+        log_info "The binary is located at: $INSTALL_DIR/$PROGRAM_NAME"
+        
+        if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+            log_warning "$INSTALL_DIR is not in your PATH."
+            log_info "Add it to your PATH by adding this line to your ~/.bashrc or ~/.zshrc:"
+            log_info "  export PATH=\"$INSTALL_DIR:\$PATH\""
+            log_info "Then restart your shell or run: source ~/.bashrc"
+        else
+            log_info "PATH looks correct. Try opening a new terminal window."
+        fi
+        
         return 1
     fi
 }
 
-show_usage() {
-    log_info "Installation completed! You can now use $PROGRAM_NAME:"
+show_usage_info() {
+    echo
+    log_info "Installation completed! Here's how to use $PROGRAM_NAME:"
     echo
     echo "  $PROGRAM_NAME install <package>  # Install an AUR package"
-    echo "  $PROGRAM_NAME --help            # Show help"
+    echo "  $PROGRAM_NAME --help            # Show help information"
     echo
-    log_info "Example: $PROGRAM_NAME install firefox-developer-edition"
+    log_info "Example usage:"
+    echo "  $PROGRAM_NAME install yay"
+    echo "  $PROGRAM_NAME install firefox-developer-edition"
     echo
-    log_info "To share this installer with others:"
-    echo "  curl -sSL $SCRIPT_URL | bash"
+    
+    if [[ -d "$BUILD_DIR" ]]; then
+        log_info "Build files are kept at: $BUILD_DIR"
+        log_info "You can safely delete this directory if you want to free up space:"
+        log_info "  sudo rm -rf $BUILD_DIR"
+    fi
 }
 
 main() {
+    echo "=========================================="
     log_info "Starting $PROGRAM_NAME installation..."
+    echo "=========================================="
     echo
     
     check_root
     check_arch
     check_dependencies
     setup_rust
-    clone_and_build
+    create_temp_directory
+    clone_repository
+    build_project
     install_binary
     
     echo
+    echo "=========================================="
     if verify_installation; then
-        echo
-        show_usage
+        log_success "Installation completed successfully!"
+        show_usage_info
     else
+        log_success "Installation completed with PATH issues."
+        show_usage_info
         echo
-        log_info "Installation completed, but $PROGRAM_NAME is not immediately available."
-        log_info "Please follow the PATH instructions above."
+        log_info "If you have PATH issues, try:"
+        log_info "1. Open a new terminal window"
+        log_info "2. Or run: hash -r"
+        log_info "3. Or add $INSTALL_DIR to your PATH manually"
     fi
-    
-    log_success "Installation process finished!"
+    echo "=========================================="
 }
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+main "$@"
