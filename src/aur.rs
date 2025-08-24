@@ -11,7 +11,6 @@ pub struct AurPackage {
     pub name: String,
     pub version: String,
     pub description: String,
-    pub url: Option<String>,
 }
 
 pub fn fetch_package_info(pkg: &str) -> io::Result<Option<AurPackage>> {
