@@ -7,7 +7,7 @@ mod cache;
 mod aur;
 
 #[derive(Parser)]
-#[command(name = "nay")]
+#[command(name = "nay", version, about = "A lightweight AUR helper written in Rust")]
 struct Cli{
     #[command(subcommand)]
     command: Commands,
@@ -25,7 +25,9 @@ fn main(){
 
     match cli.command {
         Commands::Install { package } => {
-            install_package(&package);
+            if let Err(e) = install_package(&package) {
+                eprintln!("Failed to install {}: {}", package, e);
+            }
         }
     }
 

@@ -8,9 +8,9 @@ pub fn install_package(pkg: &str) -> io::Result<()> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Package not found in AUR"))?;
 
     println!("Found {} {} - {}",
-        info.Name,
-        info.Version,
-        info.Description
+        info.name,
+        info.version,
+        info.description
     );
 
     let pkg_dir = get_package_cache(pkg)?;
