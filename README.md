@@ -1,6 +1,6 @@
-    <p align="center">
-        <img src="public/N.png" alt="">
-    </p>
+<p align="center">
+    <img src="public/N.png" alt="">
+</p>
 
 > A Rust-based AUR helper inspired by yay.
 
